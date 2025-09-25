@@ -256,7 +256,10 @@ class RSSBot {
             }
 
             const embed = this.createArticleEmbed(latestItem, feed.title);
-            await interaction.editReply({ content: '✅ Test du flux RSS - Dernier article:', embeds: [embed] });
+            const message = await interaction.editReply({ content: '✅ Test du flux RSS - Dernier article:', embeds: [embed] });
+
+            // Ajouter la réaction 🧠 pour permettre l'analyse IA
+            await message.react('🧠');
         } catch (error) {
             console.error('Erreur lors du test:', error);
             await interaction.editReply({ content: '❌ Impossible de lire ce flux RSS. Vérifiez l\'URL.' });
