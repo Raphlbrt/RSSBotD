@@ -408,27 +408,36 @@ class RSSBot {
     }
 
     async handleHealthCheck(interaction) {
-        const health = await this.aiAnalyzer.healthCheck();
+        try {
+            await interaction.deferReply({ ephemeral: true });
 
-        const embed = new EmbedBuilder()
-            .setTitle('🏥 État du système IA')
-            .setTimestamp();
+            const health = await this.aiAnalyzer.healthCheck();
 
-        if (health.status === 'ok') {
-            embed.setColor(0x00AE86)
-                .setDescription('✅ Google Gemini fonctionnel')
-                .addFields({ name: 'Status', value: health.message });
-        } else if (health.status === 'disabled') {
-            embed.setColor(0xFFA500)
-                .setDescription('⚠️ IA désactivée')
-                .addFields({ name: 'Raison', value: health.message });
-        } else {
-            embed.setColor(0xFF0000)
-                .setDescription('❌ Problème avec l\'IA')
-                .addFields({ name: 'Erreur', value: health.message });
+            const embed = new EmbedBuilder()
+                .setTitle('🏥 État du système IA')
+                .setTimestamp();
+
+            if (health.status === 'ok') {
+                embed.setColor(0x00AE86)
+                    .setDescription('✅ Google Gemini fonctionnel')
+                    .addFields({ name: 'Status', value: health.message });
+            } else if (health.status === 'disabled') {
+                embed.setColor(0xFFA500)
+                    .setDescription('⚠️ IA désactivée')
+                    .addFields({ name: 'Raison', value: health.message });
+            } else {
+                embed.setColor(0xFF0000)
+                    .setDescription('❌ Problème avec l\'IA')
+                    .addFields({ name: 'Erreur', value: health.message.substring(0, 1000) });
+            }
+
+            await interaction.editReply({ embeds: [embed] });
+        } catch (error) {
+            console.error('Erreur handleHealthCheck:', error);
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ content: '❌ Erreur lors du test IA', ephemeral: true });
+            }
         }
-
-        await interaction.reply({ embeds: [embed], ephemeral: true });
     }
 }
 
