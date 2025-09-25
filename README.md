@@ -9,6 +9,8 @@ Bot Discord permettant de gérer des flux RSS avec des commandes slash et un dé
 - 📋 Liste des flux RSS configurés par salon
 - 🧪 Test de flux RSS avant ajout
 - 📱 Embeds Discord élégants pour les articles
+- 🧠 **Analyse IA d'actualités avec génération de posts forum éducatifs**
+- 📚 Système de réactions pour déclencher l'analyse automatique
 - 🚀 **Déploiement automatique SANS ports externes** (polling Git)
 - 🌐 Alternative webhook pour serveurs avec ports ouverts
 - 💾 Base de données SQLite pour la persistance
@@ -70,6 +72,9 @@ Configurer le fichier `.env` :
 DISCORD_TOKEN=votre_token_discord_ici
 DISCORD_CLIENT_ID=votre_client_id_discord_ici
 
+# IA pour l'analyse d'actualités (REQUIS pour la fonction forum)
+OPENAI_API_KEY=votre_cle_openai_ici
+
 # Déploiement automatique (SANS ports externes - recommandé)
 ENABLE_AUTO_DEPLOY=true
 GIT_CHECK_INTERVAL=60000
@@ -78,6 +83,19 @@ GIT_CHECK_INTERVAL=60000
 # GITHUB_SECRET=votre_secret_webhook_github_ici
 # PORT=3000
 ```
+
+### 3.1. Configuration Google Gemini (IA GRATUITE pour l'analyse)
+
+1. Aller sur [Google AI Studio](https://aistudio.google.com)
+2. Se connecter avec votre compte Google
+3. Cliquer sur "Create API key"
+4. Copier la clé dans `GEMINI_API_KEY`
+
+✅ **Avantages** :
+- **Totalement gratuit** (15 requêtes/minute)
+- **Pas de carte bancaire** requise
+- **Excellent** pour l'analyse d'actualités
+- **Multimodal** (texte + images)
 
 ### 4. Configuration Discord
 
@@ -228,26 +246,70 @@ sudo systemctl status rss-webhook
 
 Une fois le bot ajouté à votre serveur :
 
+### Commandes RSS de base
 - `/rss-add <url> [nom]` - Ajouter un flux RSS au salon
 - `/rss-remove <id>` - Supprimer un flux RSS du salon
 - `/rss-list` - Lister tous les flux RSS du salon
 - `/rss-test <url>` - Tester un flux RSS
+
+### Commandes IA (Google Gemini GRATUIT)
+- `/rss-forum <salon>` - Configurer le salon de destination pour les analyses IA
+- `/rss-health` - Vérifier l'état de l'IA Gemini
+
+### Utilisation de l'analyse IA
+1. **Configuration** : Utilisez `/rss-forum #votre-salon-forum`
+2. **Test** : `/rss-health` pour vérifier que Gemini fonctionne
+3. **Déclenchement** : Réagissez avec 🧠 sur n'importe quel article RSS
+4. **Analyse** : Le bot analyse l'article avec Google Gemini (gratuit!)
+5. **Publication** : L'analyse est automatiquement publiée dans le salon forum
+
+### ⚡ Mise à jour rapide vers Gemini (GRATUIT)
+
+Si vous aviez OpenAI configuré :
+
+```bash
+# Sur votre serveur
+cd /home/botdiscord/RSSBotD
+
+# Mettre à jour les dépendances
+npm install @google/generative-ai
+npm uninstall openai
+
+# Dans .env, remplacer OPENAI_API_KEY par :
+echo "GEMINI_API_KEY=votre_cle_gemini" >> .env
+
+# Redémarrer
+./scripts/stop.sh && ./scripts/start.sh
+
+# Tester
+# Discord: /rss-health
+```
+
+### Format de l'analyse IA générée
+- **Analyse complète** : Qui, Quoi, Où, Comment, Quand, Conséquences
+- **Source et fiabilité** : Présentation et évaluation de la source
+- **Intérêt éducatif** : Pertinence pour les étudiants en informatique
+- **Pistes de réflexion** : Points d'intérêt et liens avec les métiers
+- **Questions d'approfondissement** : Pour stimuler les discussions
 
 ## 📁 Structure du projet
 
 ```
 RSSBotD/
 ├── src/
-│   ├── bot.js          # Bot principal
-│   ├── database.js     # Gestion SQLite
-│   └── webhook.js      # Serveur webhook GitHub
+│   ├── bot.js          # Bot principal avec IA
+│   ├── database.js     # Gestion SQLite + tables forum
+│   ├── ai-analyzer.js  # Analyseur IA d'actualités
+│   ├── webhook.js      # Serveur webhook GitHub
+│   └── git-poller.js   # Polling Git automatique
 ├── scripts/
 │   ├── start.sh        # Script de démarrage
 │   ├── stop.sh         # Script d'arrêt
-│   └── deploy.sh       # Script de déploiement auto
+│   ├── deploy.sh       # Script webhook
+│   └── deploy-simple.sh # Script sans ports
 ├── data/               # Base de données SQLite
-├── package.json
-├── .env.example
+├── package.json        # Dépendances IA incluses
+├── .env.example        # Config IA
 └── README.md
 ```
 

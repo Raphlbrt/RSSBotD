@@ -22,7 +22,7 @@ class Database {
 
     async createTables() {
         return new Promise((resolve, reject) => {
-            const sql = `
+            const feedsSql = `
                 CREATE TABLE IF NOT EXISTS rss_feeds (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     url TEXT NOT NULL,
@@ -34,13 +34,26 @@ class Database {
                 )
             `;
 
-            this.db.run(sql, (err) => {
+            const forumSql = `
+                CREATE TABLE IF NOT EXISTS forum_channels (
+                    guild_id TEXT PRIMARY KEY,
+                    channel_id TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            `;
+
+            this.db.run(feedsSql, (err) => {
                 if (err) {
-                    console.error('Erreur lors de la création des tables:', err);
                     reject(err);
                 } else {
-                    console.log('✅ Tables de base de données créées/vérifiées');
-                    resolve();
+                    this.db.run(forumSql, (err) => {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            console.log('✅ Tables de base de données créées/vérifiées');
+                            resolve();
+                        }
+                    });
                 }
             });
         });
@@ -115,6 +128,34 @@ class Database {
                     reject(err);
                 } else {
                     resolve(this.changes > 0);
+                }
+            });
+        });
+    }
+
+    async setForumChannel(guildId, channelId) {
+        return new Promise((resolve, reject) => {
+            const sql = `INSERT OR REPLACE INTO forum_channels (guild_id, channel_id) VALUES (?, ?)`;
+
+            this.db.run(sql, [guildId, channelId], function(err) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(this.lastID);
+                }
+            });
+        });
+    }
+
+    async getForumChannel(guildId) {
+        return new Promise((resolve, reject) => {
+            const sql = `SELECT channel_id FROM forum_channels WHERE guild_id = ?`;
+
+            this.db.get(sql, [guildId], (err, row) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(row ? row.channel_id : null);
                 }
             });
         });

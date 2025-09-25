@@ -2,6 +2,7 @@ const { Client, GatewayIntentBits, REST, Routes, EmbedBuilder } = require('disco
 const RSSParser = require('rss-parser');
 const Database = require('./database.js');
 const GitPoller = require('./git-poller.js');
+const GeminiAnalyzer = require('./ai-analyzer-gemini.js');
 const cron = require('node-cron');
 require('dotenv').config();
 
@@ -10,12 +11,14 @@ class RSSBot {
         this.client = new Client({
             intents: [
                 GatewayIntentBits.Guilds,
-                GatewayIntentBits.GuildMessages
+                GatewayIntentBits.GuildMessages,
+                GatewayIntentBits.GuildMessageReactions
             ]
         });
         this.parser = new RSSParser();
         this.db = new Database();
         this.gitPoller = new GitPoller();
+        this.aiAnalyzer = new GeminiAnalyzer();
     }
 
     async init() {
@@ -56,6 +59,12 @@ class RSSBot {
                     case 'rss-test':
                         await this.handleTestRSS(interaction);
                         break;
+                    case 'rss-forum':
+                        await this.handleSetForumChannel(interaction);
+                        break;
+                    case 'rss-health':
+                        await this.handleHealthCheck(interaction);
+                        break;
                 }
             } catch (error) {
                 console.error('Erreur lors de la commande:', error);
@@ -66,6 +75,16 @@ class RSSBot {
                 } else {
                     await interaction.reply(errorMessage);
                 }
+            }
+        });
+
+        // Gestion des réactions pour l'analyse IA
+        this.client.on('messageReactionAdd', async (reaction, user) => {
+            if (user.bot) return;
+
+            // Si c'est la réaction 🧠 sur un embed RSS
+            if (reaction.emoji.name === '🧠' && reaction.message.embeds.length > 0) {
+                await this.handleAIAnalysisRequest(reaction, user);
             }
         });
     }
@@ -117,6 +136,22 @@ class RSSBot {
                         required: true
                     }
                 ]
+            },
+            {
+                name: 'rss-forum',
+                description: 'Configurer le salon de destination pour les posts forum',
+                options: [
+                    {
+                        name: 'salon',
+                        description: 'Salon où publier les analyses IA',
+                        type: 7,
+                        required: true
+                    }
+                ]
+            },
+            {
+                name: 'rss-health',
+                description: 'Vérifier le statut de l\'IA Gemini'
             }
         ];
 
@@ -234,7 +269,7 @@ class RSSBot {
             .setTitle(item.title || 'Sans titre')
             .setURL(item.link || '')
             .setDescription(this.truncateText(item.contentSnippet || item.content || 'Aucun résumé disponible', 300))
-            .setFooter({ text: `Source: ${feedTitle}` })
+            .setFooter({ text: `Source: ${feedTitle} • Réagissez avec 🧠 pour une analyse IA` })
             .setTimestamp(new Date(item.pubDate || Date.now()));
 
         return embed;
@@ -271,7 +306,10 @@ class RSSBot {
                     const channel = await this.client.channels.fetch(feed.channel_id);
                     if (channel) {
                         const embed = this.createArticleEmbed(latestItem, feed.name);
-                        await channel.send({ embeds: [embed] });
+                        const message = await channel.send({ embeds: [embed] });
+
+                        // Ajouter automatiquement la réaction 🧠 pour l'analyse IA
+                        await message.react('🧠');
                     }
 
                     await this.db.updateLastCheck(feed.id, itemDate);
@@ -280,6 +318,117 @@ class RSSBot {
                 console.error(`Erreur lors de la vérification du flux ${feed.id}:`, error);
             }
         }
+    }
+
+    async handleSetForumChannel(interaction) {
+        const channel = interaction.options.getChannel('salon');
+
+        if (!channel.isTextBased()) {
+            await interaction.reply({ content: '❌ Veuillez sélectionner un salon textuel.', ephemeral: true });
+            return;
+        }
+
+        await this.db.setForumChannel(interaction.guild.id, channel.id);
+
+        const embed = new EmbedBuilder()
+            .setColor(0x00AE86)
+            .setTitle('✅ Salon forum configuré')
+            .setDescription(`Les analyses IA seront publiées dans ${channel}`)
+            .setTimestamp();
+
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    async handleAIAnalysisRequest(reaction, user) {
+        try {
+            const embed = reaction.message.embeds[0];
+            if (!embed || !embed.url) return;
+
+            const channel = reaction.message.channel;
+            await channel.sendTyping();
+
+            // Récupérer l'article original depuis l'embed
+            const article = {
+                title: embed.title,
+                link: embed.url,
+                pubDate: embed.timestamp,
+                contentSnippet: embed.description
+            };
+
+            // Analyser l'article avec l'IA
+            const fullContent = await this.aiAnalyzer.fetchFullArticle(article.link);
+            const analysis = await this.aiAnalyzer.analyzeNews(article, fullContent);
+
+            if (!analysis) {
+                await channel.send({ content: `❌ ${user}, impossible d'analyser cet article.` });
+                return;
+            }
+
+            // Générer le post formaté
+            const forumPost = this.aiAnalyzer.formatForumPost(analysis, article.link);
+
+            // Récupérer le salon forum configuré
+            const forumChannelId = await this.db.getForumChannel(reaction.message.guild.id);
+
+            if (!forumChannelId) {
+                await channel.send({
+                    content: `❌ ${user}, aucun salon forum configuré. Utilisez \`/rss-forum\` d'abord.`
+                });
+                return;
+            }
+
+            const forumChannel = await this.client.channels.fetch(forumChannelId);
+            if (!forumChannel) {
+                await channel.send({ content: `❌ ${user}, salon forum non trouvé.` });
+                return;
+            }
+
+            // Publier l'analyse dans le salon forum
+            const forumEmbed = new EmbedBuilder()
+                .setColor(0x5865F2)
+                .setTitle(`📚 ${forumPost.title}`)
+                .setDescription(forumPost.content.substring(0, 4096))
+                .setURL(article.link)
+                .setFooter({ text: `Analysé par IA • Demandé par ${user.displayName}` })
+                .setTimestamp();
+
+            await forumChannel.send({ embeds: [forumEmbed] });
+
+            // Confirmation
+            await channel.send({
+                content: `✅ ${user}, analyse IA publiée dans ${forumChannel} !`
+            });
+
+        } catch (error) {
+            console.error('Erreur lors de l\'analyse IA:', error);
+            await reaction.message.channel.send({
+                content: `❌ ${user}, erreur lors de l'analyse IA.`
+            });
+        }
+    }
+
+    async handleHealthCheck(interaction) {
+        const health = await this.aiAnalyzer.healthCheck();
+
+        const embed = new EmbedBuilder()
+            .setTitle('🏥 État du système IA')
+            .setTimestamp();
+
+        if (health.status === 'ok') {
+            embed.setColor(0x00AE86)
+                .setDescription('✅ Google Gemini fonctionnel')
+                .addFields({ name: 'Status', value: health.message });
+        } else if (health.status === 'disabled') {
+            embed.setColor(0xFFA500)
+                .setDescription('⚠️ IA désactivée')
+                .addFields({ name: 'Raison', value: health.message });
+        } else {
+            embed.setColor(0xFF0000)
+                .setDescription('❌ Problème avec l\'IA')
+                .addFields({ name: 'Erreur', value: health.message });
+        }
+
+        await interaction.reply({ embeds: [embed], ephemeral: true });
     }
 }
 
