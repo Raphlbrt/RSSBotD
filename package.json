@@ -1,0 +1,24 @@
+{
+  "name": "rss-bot-discord",
+  "version": "1.0.0",
+  "description": "Bot Discord pour gérer les flux RSS avec commandes slash",
+  "main": "src/bot.js",
+  "scripts": {
+    "start": "node src/bot.js",
+    "dev": "nodemon src/bot.js",
+    "deploy": "node src/deploy.js"
+  },
+  "keywords": ["discord", "bot", "rss", "feeds"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "rss-parser": "^3.13.0",
+    "sqlite3": "^5.1.6",
+    "express": "^4.18.2",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
