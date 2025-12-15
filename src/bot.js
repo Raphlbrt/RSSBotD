@@ -294,27 +294,23 @@ class RSSBot {
 
     async checkAllFeeds() {
         const allFeeds = await this.db.getAllFeeds();
-
         for (const feed of allFeeds) {
             try {
                 const parsedFeed = await this.parser.parseURL(feed.url);
                 const latestItem = parsedFeed.items[0];
-
                 if (!latestItem) continue;
 
                 const itemDate = new Date(latestItem.pubDate || Date.now());
                 const lastCheck = new Date(feed.last_check || 0);
 
-                if (itemDate > lastCheck) {
+                // Changez > en >= PUIS ajoutez une marge de 1 seconde
+                if (itemDate.getTime() > lastCheck.getTime() + 1000) {
                     const channel = await this.client.channels.fetch(feed.channel_id);
                     if (channel) {
                         const embed = this.createArticleEmbed(latestItem, feed.name);
                         const message = await channel.send({ embeds: [embed] });
-
-                        // Ajouter automatiquement la réaction 🧠 pour l'analyse IA
                         await message.react('🧠');
                     }
-
                     await this.db.updateLastCheck(feed.id, itemDate);
                 }
             } catch (error) {
